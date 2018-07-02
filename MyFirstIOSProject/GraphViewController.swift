@@ -9,11 +9,26 @@
 import UIKit
 import PureLayout
 
+struct GraphViewModel {
+    var title: String = ""
+    var subtitle: String = ""
+    var sumOfColumnsValues: Int = 0
+    var columnsData = [Int]()
+}
+//
+//protocol GraphViewControllerOutput {
+//    func viewDidPrepared(sender: GraphViewController)
+//}
+
 class GraphViewController: UIViewController {
     var viewModel = GraphViewModel()
     var titleLabel: UILabel?
     var dateRangeLabel: UILabel?
     var sumLabel: UILabel?
+    var histScrollView: UIScrollView?
+    
+    var onViewPrepared: ((GraphViewController) -> Void)?
+//    var output: GraphViewControllerOutput?
 
     //MARK: ViewController Lifecycle
 
@@ -21,6 +36,7 @@ class GraphViewController: UIViewController {
         super.viewDidLoad()
 
         setupSubviews()
+        onViewPrepared?(self)
     }
 
     private func setupSubviews() {
@@ -49,12 +65,39 @@ class GraphViewController: UIViewController {
         sumLabel.autoPinEdge(toSuperviewEdge: .right, withInset: 16)
         self.sumLabel = sumLabel
 
-        let histStubView = UIView(frame: CGRect.zero)
-        histStubView.backgroundColor = UIColor.black
+        //let histStubView = UIView(frame: CGRect.zero)
+        let histStubView = UIScrollView(frame: CGRect.zero)
+        histStubView.backgroundColor = UIColor.blue
+        histStubView.translatesAutoresizingMaskIntoConstraints = false
+        
+        
+        /*
+        let buttonPadding:CGFloat = 10
+        var xOffset:CGFloat = 10
+        
+        for i in 0 ... 10 {
+         
+            let button = UIButton()
+            button.tag = i
+            button.backgroundColor = UIColor.darkGray
+            button.setTitle("\(i)", for: .normal)
+            
+            button.frame = CGRect(x: xOffset, y: CGFloat(buttonPadding), width: 70, height: 30)
+            
+            xOffset = xOffset + CGFloat(buttonPadding) + button.frame.size.width
+            histStubView.addSubview(button)
+         
+        }
+        
+        histStubView.contentSize = CGSize(width: xOffset, height: histStubView.frame.height)*/
+        
+        histStubView.backgroundColor = UIColor.green
+        view.addSubview(histStubView)
         histStubView.autoPinEdge(toSuperviewEdge: .left, withInset: 16)
         histStubView.autoPinEdge(toSuperviewEdge: .right, withInset: 16)
         histStubView.autoPinEdge(.top, to: .bottom, of: sumLabel, withOffset: 24)
-        histStubView.autoSetDimension(.height, toSize: 150)
+        histStubView.autoSetDimension(.height, toSize: 200)
+        self.histScrollView = histStubView
 //        let histView = buildOverallHistView(graph: graph)
 //        let histColumns = buildColumnsView(graph: graph, hist: hist)
 //        addColumns(graph: graph, space: 5, hStep: 10, hist: histColumns)
@@ -70,11 +113,151 @@ class GraphViewController: UIViewController {
      Method that plots hostogram using given data
     **/
     func update(graph: GraphViewModel) {
-        titleLabel?.text = graph.title
-        dateRangeLabel?.text = graph.subtitle
-        sumLabel?.text = "\(String(graph.sumOfColumnsValues)) всего"
-    }
+        titleLabel?.attributedText = getAttributedTitleText(text: graph.title)
+        dateRangeLabel?.attributedText = getAttributedDateIntervalText(text: graph.subtitle)
+        sumLabel?.attributedText = getAttributedSumText(text: "\(String(graph.sumOfColumnsValues)) всего")
+        
+        guard let histogram = histScrollView else {
+            print("hist is nil")
+            return
+        }
+        
+        let columnWidth = 16
+        let columnsHorizontaPadding = 4
+        let highestColumnHeight = 200
+        let arrayMaxValue = graph.columnsData.max()
+        let maximumColumnsValue = arrayMaxValue != nil ? arrayMaxValue! : 0
+        var lastUsedCoordinate = 0
+        
+        for (index, height) in graph.columnsData.enumerated() {
+            
+            let currentColumnXCoordinate = index * (columnWidth + columnsHorizontaPadding)
+            let heightValue = Int(Double(height) / Double(maximumColumnsValue) * Double(highestColumnHeight))
 
+            let columnLayer = CALayer()
+            columnLayer.frame = CGRect(x: currentColumnXCoordinate, y: highestColumnHeight - heightValue, width: columnWidth, height: heightValue)
+            
+            columnLayer.backgroundColor = UIColor.blue.cgColor
+            //print(columnLayer.frame.origin.x)
+            histogram.layer.addSublayer(columnLayer)
+            
+            lastUsedCoordinate = currentColumnXCoordinate + columnWidth
+        }
+        
+        histogram.contentSize = CGSize(width: CGFloat(lastUsedCoordinate), height: histogram.frame.height)
+        
+        viewModel = graph
+        let gesture = UITapGestureRecognizer(target: self, action:  #selector (self.someAction (_:)))
+        histogram.addGestureRecognizer(gesture)
+    }
+    
+    @objc func someAction(_ sender:UITapGestureRecognizer){
+        histScrollView?.subviews.forEach { $0.removeFromSuperview() }
+        histScrollView?.layer.sublayers?.forEach{col in col.backgroundColor = UIColor.blue.cgColor}
+        
+        let columnWidth = 16
+        let columnsHorizontaPadding = 4
+        let highestColumnHeight = 200
+        let positionPoint = sender.location(in: self.histScrollView)
+        let coordinateX = Int(positionPoint.x)
+        let coordinateY = Int(positionPoint.y)
+        let selectedColumn = coordinateX / (columnWidth + columnsHorizontaPadding)
+        
+        guard coordinateX % (columnWidth + columnsHorizontaPadding) < 15 else {
+            return
+        }
+        
+        guard selectedColumn < viewModel.columnsData.count else {
+            return
+        }
+        
+        let arrayMaxValue = viewModel.columnsData.max()
+        let maximumColumnsValue = arrayMaxValue != nil ? arrayMaxValue! : 0
+        let heightValue = Int(Double(viewModel.columnsData[selectedColumn]) / Double(maximumColumnsValue) * Double(highestColumnHeight))
+        
+        guard coordinateY >= highestColumnHeight - heightValue else {
+            return
+        }
+        
+        let columnLabel = UILabel()
+        columnLabel.attributedText = getAttributedColumnLabelText(text: String(viewModel.columnsData[selectedColumn]))
+        columnLabel.frame = CGRect(x: coordinateX, y: coordinateY, width: 50, height: 50)
+        columnLabel.backgroundColor = UIColor.clear
+        columnLabel.numberOfLines = 0
+        columnLabel.sizeToFit()
+        let width = columnLabel.frame.width
+        let height = columnLabel.frame.height
+        let labelPositionY = CGFloat(highestColumnHeight - heightValue) - height
+        let labelPositionX = CGFloat((columnWidth + columnsHorizontaPadding) * selectedColumn) + (CGFloat(columnWidth) - width) / 2
+        columnLabel.frame = CGRect(x: labelPositionX, y: labelPositionY, width: width, height: height)
+        
+        histScrollView?.layer.sublayers?.forEach { col in
+            if col.frame.origin.x <= CGFloat(coordinateX) && col.frame.origin.x + col.frame.width > CGFloat(coordinateX) {
+                col.backgroundColor = UIColor.orange.cgColor
+
+            }
+            
+        }
+
+        histScrollView?.addSubview(columnLabel)
+    }
+    
+    func getAttributedTitleText(text: String) -> NSMutableAttributedString {
+        let attributedStringShadow = NSShadow()
+        attributedStringShadow.shadowBlurRadius = 5.0
+        attributedStringShadow.shadowColor = UIColor.blue
+        
+        let textAttributes = [
+            NSAttributedStringKey.foregroundColor : UIColor.orange,
+            NSAttributedStringKey.font : UIFont(name: "GillSans-UltraBold", size: 28.0)!,
+            NSAttributedStringKey.shadow : attributedStringShadow]
+            as [NSAttributedStringKey : Any]
+        
+        let attributedText = NSMutableAttributedString(string: text, attributes: textAttributes)
+        
+        return attributedText
+    }
+    
+    func getAttributedDateIntervalText(text: String) -> NSMutableAttributedString {
+        let textAttributes = [
+            NSAttributedStringKey.foregroundColor : UIColor.darkGray,
+            NSAttributedStringKey.font : UIFont(name: "Chalkduster", size: 24.0)!]
+            as [NSAttributedStringKey : Any]
+        
+        let attributedText = NSMutableAttributedString(string: text, attributes: textAttributes)
+        
+        return attributedText
+    }
+    
+    func getAttributedSumText(text: String) -> NSMutableAttributedString {
+        let attributedStringShadow = NSShadow()
+        attributedStringShadow.shadowBlurRadius = 5.0
+        attributedStringShadow.shadowColor = UIColor.green
+        
+        let textAttributes = [
+            NSAttributedStringKey.strokeColor : UIColor.red,
+            NSAttributedStringKey.foregroundColor : UIColor.blue,
+            NSAttributedStringKey.strokeWidth : -2.0,
+            NSAttributedStringKey.font : UIFont(name: "Zapfino", size: 30.0)!,
+            NSAttributedStringKey.shadow : attributedStringShadow]
+            as [NSAttributedStringKey : Any]
+        
+        let attributedText = NSMutableAttributedString(string: text, attributes: textAttributes)
+        
+        return attributedText
+    }
+    
+    func getAttributedColumnLabelText(text: String) -> NSMutableAttributedString {
+        let textAttributes = [
+            NSAttributedStringKey.foregroundColor : UIColor.red,
+            NSAttributedStringKey.font : UIFont(name: "Optima-ExtraBlack", size: 24.0)!]
+            as [NSAttributedStringKey : Any]
+        
+        let attributedText = NSMutableAttributedString(string: text, attributes: textAttributes)
+        
+        return attributedText
+    }
+    
 //
 //    /**
 //     Method that converts date inter val in format yyyy-MM-dd to dd-MMMM
@@ -194,10 +377,26 @@ class GraphViewController: UIViewController {
  */
 }
 
-struct GraphViewModel {
-    var title: String = ""
-    var subtitle: String = ""
-    var sumOfColumnsValues: Int = 0
-    var columnsData = [Int]()
+/*extension String {
+    func height(constraintedWidth width: CGFloat, font: UIFont) -> CGFloat {
+        let label =  UILabel(frame: CGRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude))
+        label.numberOfLines = 0
+        label.text = self
+        label.font = font
+        label.sizeToFit()
+        
+        return label.frame.height
+    }
 }
 
+extension String {
+    func width(constraintedHeight height: CGFloat, font: UIFont) -> CGFloat {
+        let label =  UILabel(frame: CGRect(x: 0, y: 0, width: .greatestFiniteMagnitude, height: height))
+        label.numberOfLines = 0
+        label.text = self
+        label.font = font
+        label.sizeToFit()
+        
+        return label.frame.width
+    }
+}*/

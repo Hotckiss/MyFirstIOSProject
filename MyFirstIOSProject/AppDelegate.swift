@@ -18,8 +18,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Override point for customization after application launch.
         window = UIWindow(frame: UIScreen.main.bounds)
 
-        let graphPresenter = GraphPresenter()
-        window?.rootViewController = UINavigationController(rootViewController: graphPresenter.view)
+        let graphView = GraphViewController()
+        let graphDataSource = GraphDataSource()
+        _ = GraphPresenter(view: graphView, dataSource: graphDataSource)
+        let navController = UINavigationController(rootViewController: graphView)
+        navController.navigationBar.isTranslucent = false
+        
+        window?.rootViewController = navController
         window?.makeKeyAndVisible()
         return true
     }
